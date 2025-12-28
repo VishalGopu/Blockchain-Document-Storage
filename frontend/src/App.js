@@ -80,7 +80,7 @@ const useAuth = () => {
 
 // API service
 const api = {
-  baseURL: 'http://localhost:8080/api',
+  baseURL: API_CONFIG.BASE_URL,
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
@@ -725,6 +725,7 @@ const StudentsList = ({ students }) => {
               <p style={{ fontSize: '13px', color: '#6b7280' }}>ID: {student.id}</p>
             </div>
           </div>
+
         </div>
       ))}
 

@@ -3,10 +3,12 @@ package com.educhain.document_system.controller;
 
 import com.educhain.document_system.model.User;
 import com.educhain.document_system.service.UserService;
+import com.educhain.document_system.service.RecaptchaService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.ResponseEntity;
 import org.springframework.web.bind.annotation.*;
 import jakarta.servlet.http.HttpSession;
+import jakarta.servlet.http.HttpServletRequest;
 import java.util.HashMap;
 import java.util.Map;
 
@@ -17,16 +19,37 @@ public class AuthController {
     @Autowired
     private UserService userService;
     
+    @Autowired
+    private RecaptchaService recaptchaService;
+    
     // User login
     @PostMapping("/login")
     public ResponseEntity<Map<String, Object>> login(
             @RequestParam String username,
             @RequestParam String password,
-            HttpSession session) {
+            @RequestParam(required = false) String recaptchaToken,
+            HttpSession session,
+            HttpServletRequest request) {
         
         Map<String, Object> response = new HashMap<>();
         
         try {
+            // Verify reCAPTCHA
+            if (recaptchaToken == null || recaptchaToken.trim().isEmpty()) {
+                response.put("success", false);
+                response.put("message", "reCAPTCHA verification is required.");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            String userIp = getClientIpAddress(request);
+            boolean recaptchaValid = recaptchaService.verifyRecaptcha(recaptchaToken, userIp);
+            
+            if (!recaptchaValid) {
+                response.put("success", false);
+                response.put("message", "reCAPTCHA verification failed. Please try again.");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
             User user = userService.loginUser(username, password);
             
             // Store user in session
@@ -53,11 +76,29 @@ public class AuthController {
     public ResponseEntity<Map<String, Object>> register(
             @RequestParam String username,
             @RequestParam String password,
-            @RequestParam String role) {
+            @RequestParam String role,
+            @RequestParam(required = false) String recaptchaToken,
+            HttpServletRequest request) {
         
         Map<String, Object> response = new HashMap<>();
         
         try {
+            // Verify reCAPTCHA
+            if (recaptchaToken == null || recaptchaToken.trim().isEmpty()) {
+                response.put("success", false);
+                response.put("message", "reCAPTCHA verification is required.");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
+            String userIp = getClientIpAddress(request);
+            boolean recaptchaValid = recaptchaService.verifyRecaptcha(recaptchaToken, userIp);
+            
+            if (!recaptchaValid) {
+                response.put("success", false);
+                response.put("message", "reCAPTCHA verification failed. Please try again.");
+                return ResponseEntity.badRequest().body(response);
+            }
+            
             User.Role userRole = User.Role.valueOf(role.toUpperCase());
             User newUser = userService.registerUser(username, password, userRole);
             
@@ -130,5 +171,22 @@ public class AuthController {
         }
         
         return ResponseEntity.ok(response);
+    }
+    
+    /**
+     * Helper method to get client IP address
+     */
+    private String getClientIpAddress(HttpServletRequest request) {
+        String xForwardedFor = request.getHeader("X-Forwarded-For");
+        if (xForwardedFor != null && !xForwardedFor.isEmpty()) {
+            return xForwardedFor.split(",")[0].trim();
+        }
+        
+        String xRealIp = request.getHeader("X-Real-IP");
+        if (xRealIp != null && !xRealIp.isEmpty()) {
+            return xRealIp;
+        }
+        
+        return request.getRemoteAddr();
     }
 }
