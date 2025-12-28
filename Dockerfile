@@ -1,5 +1,5 @@
 # Dockerfile for Railway deployment (optional - Railway can auto-detect Java)
-FROM openjdk:17-jdk-slim
+FROM eclipse-temurin:17-jdk-jammy
 
 # Set working directory
 WORKDIR /app
