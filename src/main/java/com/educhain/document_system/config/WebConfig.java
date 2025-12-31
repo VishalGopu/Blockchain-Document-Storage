@@ -17,7 +17,7 @@ public class WebConfig implements WebMvcConfigurer {
         
         config.setAllowCredentials(true);
         config.addAllowedOrigin("http://localhost:3000");
-        config.addAllowedOrigin("https://blockchain-document-storagen-kfym6dhgc.vercel.app");
+        config.addAllowedOrigin("https://blockchain-document-storage.vercel.app/");
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
         
