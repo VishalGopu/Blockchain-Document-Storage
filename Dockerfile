@@ -1,4 +1,4 @@
-# Dockerfile for Railway deployment (optional - Railway can auto-detect Java)
+# Dockerfile for DigitalOcean App Platform deployment
 FROM eclipse-temurin:17-jdk-jammy
 
 # Set working directory
@@ -7,6 +7,9 @@ WORKDIR /app
 # Copy Maven wrapper and pom.xml first for better layer caching
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
+
+# Make mvnw executable (Fix for permission denied error)
+RUN chmod +x mvnw
 
 # Download dependencies
 RUN ./mvnw dependency:resolve
@@ -17,7 +20,7 @@ COPY src src
 # Build the application
 RUN ./mvnw clean package -DskipTests
 
-# Expose port (Railway will override with PORT env var)
+# Expose port (DigitalOcean will override with PORT env var)
 EXPOSE 8080
 
 # Create uploads directory
