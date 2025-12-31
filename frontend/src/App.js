@@ -80,7 +80,7 @@ const useAuth = () => {
 
 // API service
 const api = {
-  baseURL: process. env.REACT_APP_API_URL || 'http://localhost:8080/api',
+  baseURL: process.env.REACT_APP_API_URL || 'http://localhost:8080/api',
 
   async request(endpoint, options = {}) {
     const url = `${this.baseURL}${endpoint}`;
