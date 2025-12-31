@@ -1,5 +1,8 @@
 import React, { useState, useEffect, createContext, useContext } from 'react';
 import { FileText, Upload, Download, Shield, User, LogOut, Search, Trash2, CheckCircle, XCircle, Users, BookOpen } from 'lucide-react';
+import ReCAPTCHA from 'react-google-recaptcha';
+
+const RECAPTCHA_SITE_KEY = '6LfOAzwsAAAAAN_0F7toXRAf9J1kK9PyBqXD5n_b';
 
 // Inline styles
 const styles = {
@@ -104,20 +107,26 @@ const api = {
     }
   },
 
-  login: (username, password) => {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-    return api.request('/auth/login', { method: 'POST', headers: {}, body: formData });
-  },
+  login: (username, password, recaptchaToken) => {
+  const formData = new FormData();
+  formData.append('username', username);
+  formData.append('password', password);
+  if (recaptchaToken) {
+    formData.append('recaptchaToken', recaptchaToken);
+  }
+  return api. request('/auth/login', { method: 'POST', headers: {}, body: formData });
+},
 
-  register: (username, password, role) => {
-    const formData = new FormData();
-    formData.append('username', username);
-    formData.append('password', password);
-    formData.append('role', role);
-    return api.request('/auth/register', { method: 'POST', headers: {}, body: formData });
-  },
+  register: (username, password, role, recaptchaToken) => {
+  const formData = new FormData();
+  formData.append('username', username);
+  formData.append('password', password);
+  formData.append('role', role);
+  if (recaptchaToken) {
+    formData.append('recaptchaToken', recaptchaToken);
+  }
+  return api.request('/auth/register', { method: 'POST', headers: {}, body: formData });
+},
 
   logout: () => api.request('/auth/logout', { method: 'POST' }),
   checkAuth: () => api.request('/auth/check'),
@@ -158,18 +167,18 @@ const AuthProvider = ({ children }) => {
     }
   };
 
-  const login = async (username, password) => {
-    try {
-      const response = await api.login(username, password);
-      if (response.success) {
-        setUser({ id: response.userId, username: response.username, role: response.role });
-        return { success: true };
-      }
-      return { success: false, message: response.message };
-    } catch (error) {
-      return { success: false, message: 'Login failed. Please try again.' };
+  const login = async (username, password, recaptchaToken) => {
+  try {
+    const response = await api. login(username, password, recaptchaToken);
+    if (response.success) {
+      setUser({ id: response.userId, username: response.username, role: response.role });
+      return { success: true };
     }
-  };
+    return { success: false, message: response.message };
+  } catch (error) {
+    return { success: false, message: 'Login failed. Please try again.' };
+  }
+};
 
   const logout = async () => {
     try {
@@ -181,14 +190,14 @@ const AuthProvider = ({ children }) => {
     }
   };
 
-  const register = async (username, password, role) => {
-    try {
-      const response = await api.register(username, password, role);
-      return response.success ? { success: true, message: response.message } : { success: false, message: response.message };
-    } catch (error) {
-      return { success: false, message: 'Registration failed. Please try again.' };
-    }
-  };
+  const register = async (username, password, role, recaptchaToken) => {
+  try {
+    const response = await api.register(username, password, role, recaptchaToken);
+    return response.success ? { success: true, message:  response.message } : { success: false, message: response.message };
+  } catch (error) {
+    return { success: false, message: 'Registration failed. Please try again.' };
+  }
+};
 
   return <AuthContext.Provider value={{ user, login, logout, register, loading }}>{children}</AuthContext.Provider>;
 };
@@ -201,14 +210,14 @@ const LoginPage = () => {
   const [error, setError] = useState('');
   const [showRegister, setShowRegister] = useState(false);
 
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    setLoading(true);
-    setError('');
-    const result = await login(formData.username, formData.password);
-    if (!result.success) setError(result.message);
-    setLoading(false);
-  };
+  const handleSubmit = async (e, recaptchaToken) => {
+  e.preventDefault();
+  setLoading(true);
+  setError('');
+  const result = await login(formData.username, formData.password, recaptchaToken);
+  if (!result.success) setError(result.message);
+  setLoading(false);
+};
 
   return (
     <div style={{ minHeight: '100vh', background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '1rem' }}>
@@ -230,78 +239,180 @@ const LoginPage = () => {
     </div>
   );
 };
+const LoginForm = ({ formData, setFormData, handleSubmit, loading, error, setShowRegister }) => {
+  const [recaptchaToken, setRecaptchaToken] = useState(null);
 
-const LoginForm = ({ formData, setFormData, handleSubmit, loading, error, setShowRegister }) => (
-  <form onSubmit={handleSubmit}>
-    <div style={{ marginBottom: '1rem' }}>
-      <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
-      <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} style={styles.input} placeholder="Enter your username" required />
-    </div>
+  const onSubmit = async (e) => {
+    e.preventDefault();
+    if (!recaptchaToken) {
+      // Need to handle error - for now just return
+      return;
+    }
+    await handleSubmit(e, recaptchaToken);
+  };
 
-    <div style={{ marginBottom: '1rem' }}>
-      <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Password</label>
-      <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} style={styles.input} placeholder="Enter your password" required />
-    </div>
+  return (
+    <form onSubmit={onSubmit}>
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
+        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target. value })} style={styles.input} placeholder="Enter your username" required />
+      </div>
 
-    {error && <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '14px' }}>{error}</div>}
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Password</label>
+        <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} style={styles.input} placeholder="Enter your password" required />
+      </div>
 
-    <button type="submit" disabled={loading} style={{ ...styles.button, ...styles.buttonPrimary, width: '100%', marginBottom: '1rem' }}>
-      {loading ? 'Signing in...' : 'Sign In'}
-    </button>
+      {/* reCAPTCHA Widget */}
+      <div style={{ marginBottom: '1rem', display:  'flex', justifyContent:  'center' }}>
+        <ReCAPTCHA
+          sitekey={RECAPTCHA_SITE_KEY}
+          onChange={(token) => setRecaptchaToken(token)}
+          onExpired={() => setRecaptchaToken(null)}
+        />
+      </div>
 
-    <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
-      Don't have an account?{' '}
-      <button type="button" onClick={() => setShowRegister(true)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}>
-        Register here
+      {error && <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '14px' }}>{error}</div>}
+
+      <button 
+        type="submit" 
+        disabled={loading || !recaptchaToken} 
+        style={{ 
+          ...styles.button, 
+          ...styles.buttonPrimary, 
+          width: '100%', 
+          marginBottom:  '1rem',
+          backgroundColor:  loading || !recaptchaToken ? '#9ca3af' :  '#2563eb',
+          cursor: loading || !recaptchaToken ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {loading ?  'Signing in...' :  'Sign In'}
       </button>
-    </p>
-  </form>
-);
 
+      <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+        Don't have an account?{' '}
+        <button type="button" onClick={() => setShowRegister(true)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}>
+          Register here
+        </button>
+      </p>
+    </form>
+  );
+};
 const RegisterForm = ({ setShowRegister }) => {
   const { register } = useAuth();
-  const [formData, setFormData] = useState({ username: '', password: '', role: 'STUDENT' });
+  const [formData, setFormData] = useState({ username: '', password:  '', role: 'STUDENT' });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
+  const [recaptchaToken, setRecaptchaToken] = useState(null);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Check reCAPTCHA
+    if (!recaptchaToken) {
+      setError('Please complete the reCAPTCHA verification');
+      return;
+    }
+    
     setLoading(true);
     setError('');
     setSuccess('');
-    const result = await register(formData.username, formData.password, formData.role);
+    
+    const result = await register(formData.username, formData.password, formData.role, recaptchaToken);
+    
     if (result.success) {
       setSuccess(result.message);
       setTimeout(() => setShowRegister(false), 2000);
     } else {
       setError(result.message);
     }
+    
     setLoading(false);
+    setRecaptchaToken(null); // Reset reCAPTCHA after submission
   };
 
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
-        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} style={styles.input} placeholder="Choose a username" required />
+        <label style={{ display: 'block', fontSize:  '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
+        <input 
+          type="text" 
+          value={formData.username} 
+          onChange={(e) => setFormData({ ...formData, username: e.target.value })} 
+          style={styles. input} 
+          placeholder="Choose a username" 
+          required 
+        />
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Password</label>
-        <input type="password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} style={styles.input} placeholder="Choose a password" required />
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom:  '0.5rem' }}>Password</label>
+        <input 
+          type="password" 
+          value={formData.password} 
+          onChange={(e) => setFormData({ ...formData, password: e.target.value })} 
+          style={styles.input} 
+          placeholder="Choose a password" 
+          required 
+        />
       </div>
 
-      {error && <div style={{ backgroundColor: '#fee2e2', border: '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '14px' }}>{error}</div>}
-      {success && <div style={{ backgroundColor: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '14px' }}>{success}</div>}
+      <div style={{ marginBottom: '1rem' }}>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Role</label>
+        <select 
+          value={formData.role} 
+          onChange={(e) => setFormData({ ...formData, role: e.target.value })} 
+          style={styles.input}
+        >
+          <option value="STUDENT">Student</option>
+          <option value="ADMIN">Admin</option>
+        </select>
+      </div>
 
-      <button type="submit" disabled={loading} style={{ ...styles.button, backgroundColor: '#059669', color: 'white', width: '100%', marginBottom: '1rem' }}>
-        {loading ? 'Creating account...' : 'Create Account'}
+      {/* reCAPTCHA Widget */}
+      <div style={{ marginBottom: '1rem', display: 'flex', justifyContent: 'center' }}>
+        <ReCAPTCHA
+          sitekey={RECAPTCHA_SITE_KEY}
+          onChange={(token) => setRecaptchaToken(token)}
+          onExpired={() => setRecaptchaToken(null)}
+        />
+      </div>
+
+      {error && (
+        <div style={{ backgroundColor:  '#fee2e2', border:  '1px solid #fca5a5', color: '#991b1b', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize: '14px' }}>
+          {error}
+        </div>
+      )}
+      
+      {success && (
+        <div style={{ backgroundColor: '#d1fae5', border: '1px solid #6ee7b7', color: '#065f46', padding: '0.75rem', borderRadius: '8px', marginBottom: '1rem', fontSize:  '14px' }}>
+          {success}
+        </div>
+      )}
+
+      <button 
+        type="submit" 
+        disabled={loading || !recaptchaToken} 
+        style={{ 
+          ...styles.button, 
+          backgroundColor: loading || !recaptchaToken ? '#9ca3af' : '#059669', 
+          color: 'white', 
+          width: '100%', 
+          marginBottom: '1rem',
+          cursor: loading || !recaptchaToken ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {loading ?  'Creating account...' : 'Create Account'}
       </button>
 
-      <p style={{ textAlign: 'center', color: '#6b7280', fontSize: '14px' }}>
+      <p style={{ textAlign: 'center', color:  '#6b7280', fontSize:  '14px' }}>
         Already have an account?{' '}
-        <button type="button" onClick={() => setShowRegister(false)} style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}>
+        <button 
+          type="button" 
+          onClick={() => setShowRegister(false)} 
+          style={{ background: 'none', border: 'none', color: '#2563eb', cursor: 'pointer', textDecoration: 'underline' }}
+        >
           Sign in here
         </button>
       </p>
