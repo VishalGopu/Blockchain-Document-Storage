@@ -17,11 +17,13 @@ public class WebConfig implements WebMvcConfigurer {
         
         config.setAllowCredentials(true);
         config.addAllowedOrigin("http://localhost:3000");
-        config.addAllowedOrigin("https://blockchain-document-storage.vercel.app/");
+        config.addAllowedOrigin("https://blockchain-document-storage.vercel.app");
+        config.addAllowedOrigin("https://blockchain-backend-lnyq3.ondigitalocean.app");
         config.addAllowedHeader("*");
         config.addAllowedMethod("*");
+        config.addExposedHeader("Set-Cookie");
         
-        source.registerCorsConfiguration("/api/**", config);
+        source.registerCorsConfiguration("/**", config);
         return new CorsFilter(source);
     }
 }
