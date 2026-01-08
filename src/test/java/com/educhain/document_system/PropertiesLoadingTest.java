@@ -15,14 +15,18 @@ import static org.junit.jupiter.api.Assertions.*;
  */
 class PropertiesLoadingTest {
 
-    @Test
-    void testApplicationPropertiesCanBeLoaded() throws IOException {
-        // Load the application.properties file
+    private Properties loadApplicationProperties() throws IOException {
         Properties properties = new Properties();
         try (InputStream input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
             assertNotNull(input, "application.properties should exist");
             properties.load(input);
         }
+        return properties;
+    }
+
+    @Test
+    void testApplicationPropertiesCanBeLoaded() throws IOException {
+        Properties properties = loadApplicationProperties();
 
         // Verify that cookie properties exist and have correct values
         assertEquals("none", properties.getProperty("server.servlet.session.cookie.same-site"), 
@@ -37,19 +41,16 @@ class PropertiesLoadingTest {
 
     @Test
     void testNoInlineCommentsInCookieProperties() throws IOException {
-        // Load the application.properties file
-        Properties properties = new Properties();
-        try (InputStream input = getClass().getClassLoader().getResourceAsStream("application.properties")) {
-            assertNotNull(input, "application.properties should exist");
-            properties.load(input);
-        }
+        Properties properties = loadApplicationProperties();
 
         // Verify that property values do NOT contain inline comments
         String secureValue = properties.getProperty("server.servlet.session.cookie.secure");
+        assertNotNull(secureValue, "Secure property should exist");
         assertFalse(secureValue.contains("#"), 
             "Secure property should not contain inline comment");
         
         String httpOnlyValue = properties.getProperty("server.servlet.session.cookie.http-only");
+        assertNotNull(httpOnlyValue, "HttpOnly property should exist");
         assertFalse(httpOnlyValue.contains("#"), 
             "HttpOnly property should not contain inline comment");
     }
