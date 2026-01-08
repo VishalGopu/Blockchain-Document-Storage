@@ -1,30 +1,34 @@
-# Dockerfile for DigitalOcean App Platform deployment
-FROM eclipse-temurin:17-jdk-jammy
+# Multi-stage Dockerfile for DigitalOcean App Platform
+# Stage 1: Build stage
+FROM eclipse-temurin:17-jdk-jammy AS builder
 
-# Set working directory
 WORKDIR /app
 
-# Copy Maven wrapper and pom.xml first for better layer caching
+# Copy Maven wrapper and make executable
 COPY mvnw pom.xml ./
 COPY .mvn .mvn
-
-# Make mvnw executable (Fix for permission denied error)
 RUN chmod +x mvnw
 
-# Download dependencies
-RUN ./mvnw dependency:resolve
+# Download dependencies (cached layer)
+RUN ./mvnw dependency:go-offline -B
 
-# Copy source code
+# Copy source and build
 COPY src src
-
-# Build the application
 RUN ./mvnw clean package -DskipTests
 
-# Expose port (DigitalOcean will override with PORT env var)
-EXPOSE 8080
+# Stage 2: Runtime stage
+FROM eclipse-temurin:17-jre-jammy
+
+WORKDIR /app
 
 # Create uploads directory
 RUN mkdir -p /tmp/uploads
 
-# Run the application
-CMD ["java", "-jar", "target/document-system-0.0.1-SNAPSHOT.jar"]
+# Copy only the built artifact from builder stage
+COPY --from=builder /app/target/document-system-0.0.1-SNAPSHOT.jar app.jar
+
+# Expose port
+EXPOSE 8080
+
+# Run with optimized JVM settings for containers
+ENTRYPOINT ["java", "-XX:+UseContainerSupport", "-XX:MaxRAMPercentage=75.0", "-jar", "app.jar"]
