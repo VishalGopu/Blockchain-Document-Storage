@@ -114,7 +114,7 @@ const api = {
   if (recaptchaToken) {
     formData.append('recaptchaToken', recaptchaToken);
   }
-  return api. request('/auth/login', { method: 'POST', headers: {}, body: formData });
+  return api.request('/auth/login', { method: 'POST', headers: {}, body: formData });
 },
 
   register: (username, password, role, recaptchaToken) => {
@@ -169,7 +169,7 @@ const AuthProvider = ({ children }) => {
 
   const login = async (username, password, recaptchaToken) => {
   try {
-    const response = await api. login(username, password, recaptchaToken);
+    const response = await api.login(username, password, recaptchaToken);
     if (response.success) {
       setUser({ id: response.userId, username: response.username, role: response.role });
       return { success: true };
@@ -255,7 +255,7 @@ const LoginForm = ({ formData, setFormData, handleSubmit, loading, error, setSho
     <form onSubmit={onSubmit}>
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
-        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target. value })} style={styles.input} placeholder="Enter your username" required />
+        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} style={styles.input} placeholder="Enter your username" required />
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
@@ -340,7 +340,7 @@ const RegisterForm = ({ setShowRegister }) => {
           type="text" 
           value={formData.username} 
           onChange={(e) => setFormData({ ...formData, username: e.target.value })} 
-          style={styles. input} 
+          style={styles.input} 
           placeholder="Choose a username" 
           required 
         />
