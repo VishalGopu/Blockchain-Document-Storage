@@ -44,16 +44,7 @@ public class GeminiVerificationService {
     private static final Set<String> SUPPORTED_FILE_TYPES = Set.of(
         "application/pdf",
         "image/jpeg",
-        "image/jpg", 
         "image/png"
-    );
-    
-    private static final Map<String, String> DOCUMENT_TYPE_MAPPING = Map.of(
-        "transcript", "Transcript",
-        "certificate", "Certificate",
-        "diploma", "Diploma",
-        "degree", "Degree",
-        "general", "General"
     );
     
     public GeminiVerificationService() {
@@ -98,7 +89,7 @@ public class GeminiVerificationService {
             }
             
             // Call Gemini API for image files
-            String geminiResponse = analyzeDocumentWithGemini(imageBytes, selectedDocumentType);
+            String geminiResponse = analyzeDocumentWithGemini(imageBytes, selectedDocumentType, contentType);
             
             // Parse response
             return parseGeminiResponse(geminiResponse, selectedDocumentType);
@@ -115,7 +106,7 @@ public class GeminiVerificationService {
     /**
      * Calls Google Gemini API to analyze document
      */
-    private String analyzeDocumentWithGemini(byte[] imageBytes, String documentType) throws Exception {
+    private String analyzeDocumentWithGemini(byte[] imageBytes, String documentType, String mimeType) throws Exception {
         logger.info("Calling Gemini API for document analysis");
         
         // Convert image to base64
@@ -139,10 +130,10 @@ public class GeminiVerificationService {
         textPart.put("text", prompt);
         parts.add(textPart);
         
-        // Image part
+        // Image part with correct MIME type
         Map<String, Object> imagePart = new HashMap<>();
         Map<String, String> inlineData = new HashMap<>();
-        inlineData.put("mimeType", "image/jpeg");
+        inlineData.put("mimeType", mimeType);
         inlineData.put("data", base64Image);
         imagePart.put("inline_data", inlineData);
         parts.add(imagePart);
@@ -259,9 +250,11 @@ public class GeminiVerificationService {
             }
             
             // Check if detected type matches expected type (case-insensitive)
-            boolean typeMatch = detectedType.equalsIgnoreCase(expectedType) || 
-                               detectedType.toLowerCase().contains(expectedType.toLowerCase()) ||
-                               expectedType.toLowerCase().contains(detectedType.toLowerCase());
+            String detectedTypeLower = detectedType.toLowerCase();
+            String expectedTypeLower = expectedType.toLowerCase();
+            boolean typeMatch = detectedTypeLower.equals(expectedTypeLower) || 
+                               detectedTypeLower.contains(expectedTypeLower) ||
+                               expectedTypeLower.contains(detectedTypeLower);
             
             if (isValid && typeMatch) {
                 return VerificationResult.success(detectedType, confidence);

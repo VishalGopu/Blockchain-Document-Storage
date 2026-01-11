@@ -6,6 +6,8 @@ This guide explains how to set up Google Gemini AI for document verification in 
 
 The EduChain system uses Google Gemini Vision API to automatically verify document types during admin uploads. This ensures that uploaded documents match their declared type (e.g., Certificate, Transcript, Diploma).
 
+**Implementation Note**: The integration uses Google Gemini's REST API directly via Spring's RestTemplate, so no additional Maven dependencies are required beyond the standard Spring Boot libraries already in the project.
+
 ## 🔑 Getting Your API Key
 
 ### Step 1: Get Gemini API Key
