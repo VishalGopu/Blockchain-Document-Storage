@@ -844,9 +844,13 @@ const UploadDocument = ({ students, onUpload }) => {
         </div>
       </div>
 
-      <button type="submit" disabled={loading || !file || !formData.studentId} style={{ ...styles.button, ...styles.buttonPrimary, width: '100%' }}>
-        {loading ? 'Uploading...' : 'Upload Document'}
-      </button>
+      <button 
+  type="submit" 
+  disabled={loading || !file || !formData.studentId} 
+  style={{ ... styles.button, ... styles.buttonPrimary, width: '100%' }}
+>
+  {loading ? '🤖 Verifying & Uploading...' : 'Upload Document'}
+</button>
     </form>
   );
 };
