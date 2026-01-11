@@ -30,43 +30,65 @@ public class DocumentController {
     private UserService userService;
     
     // Upload document (Admin only)
-    @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadDocument(
-            @RequestParam("file") MultipartFile file,
-            @RequestParam("studentId") Long studentId,
-            @RequestParam(value = "documentType", defaultValue = "General") String documentType,
-            @RequestParam(value = "description", defaultValue = "") String description,
-            HttpSession session) {
-        
-        Map<String, Object> response = new HashMap<>();
-        
-        try {
-            // Check if user is admin
-            User currentUser = (User) session.getAttribute("user");
-            if (currentUser == null || currentUser.getRole() != User.Role.ADMIN) {
-                response.put("success", false);
-                response.put("message", "Access denied! Admin only.");
-                return ResponseEntity.ok(response);
-            }
-            
-            // Get student
-            User student = userService.getUserById(studentId);
-            
-            // Upload document
-            Document document = documentService.uploadDocument(file, student, documentType, description);
-            
-            response.put("success", true);
-            response.put("message", "Document uploaded successfully!");
-            response.put("documentId", document.getId());
-            response.put("filename", document.getFilename());
-            
-        } catch (Exception e) {
+    @Autowired
+private GeminiVerificationService geminiVerificationService; // Add this at the top with other @Autowired
+
+@PostMapping("/upload")
+public ResponseEntity<Map<String, Object>> uploadDocument(
+        @RequestParam("file") MultipartFile file,
+        @RequestParam("studentId") Long studentId,
+        @RequestParam(value = "documentType", defaultValue = "General") String documentType,
+        @RequestParam(value = "description", defaultValue = "") String description,
+        HttpSession session) {
+    
+    Map<String, Object> response = new HashMap<>();
+    
+    try {
+        // Check if user is admin
+        User currentUser = (User) session.getAttribute("user");
+        if (currentUser == null || currentUser.getRole() != User.Role.ADMIN) {
             response.put("success", false);
-            response.put("message", "Upload failed: " + e.getMessage());
+            response.put("message", "Access denied!  Admin only.");
+            return ResponseEntity.ok(response);
         }
         
-        return ResponseEntity.ok(response);
+        // ✅ NEW: AI VERIFICATION FOR NON-GENERAL DOCUMENTS
+        if (!documentType.equalsIgnoreCase("General")) {
+            VerificationResult verificationResult = geminiVerificationService.verifyDocument(file, documentType);
+            
+            if (! verificationResult.isVerified()) {
+                response.put("success", false);
+                response.put("verified", false);
+                response.put("message", verificationResult.getMessage());
+                response.put("detectedType", verificationResult.getDetectedType());
+                response.put("confidence", verificationResult.getConfidenceScore());
+                response.put("typeMismatch", verificationResult.isTypeMismatch());
+                return ResponseEntity. ok(response);
+            }
+            
+            // Add verification info to success response
+            response.put("verified", true);
+            response.put("confidence", verificationResult.getConfidenceScore());
+        }
+        
+        // Get student
+        User student = userService.getUserById(studentId);
+        
+        // Upload document
+        Document document = documentService. uploadDocument(file, student, documentType, description);
+        
+        response.put("success", true);
+        response.put("message", "Document uploaded successfully!");
+        response.put("documentId", document.getId());
+        response.put("filename", document.getFilename());
+        
+    } catch (Exception e) {
+        response.put("success", false);
+        response.put("message", "Upload failed: " + e.getMessage());
     }
+    
+    return ResponseEntity.ok(response);
+}
     
     // Get documents for current user
     @GetMapping("/my-documents")
