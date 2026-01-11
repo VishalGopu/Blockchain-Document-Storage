@@ -1,7 +1,8 @@
 package com.educhain.document_system.controller;
 
 
-
+import com.educhain. document_system.service.GeminiVerificationService;
+import com. educhain.document_system.model.VerificationResult;
 import com.educhain.document_system.model.Document;
 import com.educhain.document_system.model.User;
 import com.educhain.document_system.service.DocumentService;
