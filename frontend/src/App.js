@@ -114,7 +114,7 @@ const api = {
   if (recaptchaToken) {
     formData.append('recaptchaToken', recaptchaToken);
   }
-  return api. request('/auth/login', { method: 'POST', headers: {}, body: formData });
+  return api.request('/auth/login', { method: 'POST', headers: {}, body: formData });
 },
 
   register: (username, password, role, recaptchaToken) => {
@@ -139,7 +139,7 @@ const api = {
     formData.append('verificationPassed', 'true');
     return api.request('/documents/upload', { method: 'POST', headers: {}, body: formData });
   },
-  verifyDocument: (file, documentType) => {
+  verifyDocumentType: (file, documentType) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('documentType', documentType);
@@ -151,7 +151,7 @@ const api = {
   },
   getMyDocuments: () => api.request('/documents/my-documents'),
   downloadDocument: (documentId) => fetch(`${api.baseURL}/documents/download/${documentId}`, { credentials: 'include' }),
-  verifyDocument: (documentId) => api.request(`/documents/verify/${documentId}`),
+  verifyDocumentIntegrity: (documentId) => api.request(`/documents/verify/${documentId}`),
   getAllStudents: () => api.request('/documents/students'),
   deleteDocument: (documentId) => api.request(`/documents/${documentId}`, { method: 'DELETE' }),
 };
@@ -180,7 +180,7 @@ const AuthProvider = ({ children }) => {
 
   const login = async (username, password, recaptchaToken) => {
   try {
-    const response = await api. login(username, password, recaptchaToken);
+    const response = await api.login(username, password, recaptchaToken);
     if (response.success) {
       setUser({ id: response.userId, username: response.username, role: response.role });
       return { success: true };
@@ -266,7 +266,7 @@ const LoginForm = ({ formData, setFormData, handleSubmit, loading, error, setSho
     <form onSubmit={onSubmit}>
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
-        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target. value })} style={styles.input} placeholder="Enter your username" required />
+        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} style={styles.input} placeholder="Enter your username" required />
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
@@ -346,12 +346,12 @@ const RegisterForm = ({ setShowRegister }) => {
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', fontSize:  '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
         <input 
           type="text" 
           value={formData.username} 
           onChange={(e) => setFormData({ ...formData, username: e.target.value })} 
-          style={styles. input} 
+          style={styles.input} 
           placeholder="Choose a username" 
           required 
         />
@@ -609,7 +609,7 @@ const DocumentsList = ({ documents, onRefresh }) => {
   const handleVerify = async (documentId) => {
     setVerifying((prev) => ({ ...prev, [documentId]: true }));
     try {
-      const response = await api.verifyDocument(documentId);
+      const response = await api.verifyDocumentIntegrity(documentId);
       alert(response.message);
     } catch (error) {
       alert('Verification failed');
@@ -750,7 +750,7 @@ const UploadDocument = ({ students, onUpload }) => {
     setVerificationResult(null);
 
     try {
-      const response = await api.verifyDocument(file, formData.documentType);
+      const response = await api.verifyDocumentType(file, formData.documentType);
 
       setVerificationResult(response);
       
@@ -987,7 +987,7 @@ const StudentDashboard = () => {
 
   const handleVerify = async (documentId) => {
     try {
-      const response = await api.verifyDocument(documentId);
+      const response = await api.verifyDocumentIntegrity(documentId);
       alert(response.message);
     } catch (error) {
       alert('Verification failed');
