@@ -724,26 +724,56 @@ const UploadDocument = ({ students, onUpload }) => {
   };
 
   const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!file || !formData.studentId) return;
+  e.preventDefault();
+  if (!file || !formData.studentId) return;
 
-    setLoading(true);
-    try {
-      const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description);
-      if (response.success) {
-        alert('Document uploaded successfully!');
-        setFile(null);
-        setFormData({ studentId: '', documentType: 'General', description: '' });
-        onUpload();
+  setLoading(true);
+  try {
+    const response = await api.uploadDocument(
+      file,
+      formData. studentId,
+      formData. documentType,
+      formData. description
+    );
+
+    if (response.success) {
+      // Check if verification was performed
+      if (response.verified !== undefined) {
+        const confidencePercent = Math.round((response.confidence || 0) * 100);
+        alert(`✅ Document verified (${confidencePercent}% confidence) and uploaded successfully!`);
       } else {
-        alert(response.message);
+        alert('✅ Document uploaded successfully!');
       }
-    } catch (error) {
-      alert('Upload failed. Please try again.');
-    } finally {
-      setLoading(false);
+      
+      setFile(null);
+      setFormData({ studentId: '', documentType:  'General', description: '' });
+      onUpload();
+    } else {
+      // Handle verification failure
+      if (response.verified === false) {
+        const confidencePercent = Math.round((response.confidence || 0) * 100);
+        let errorMsg = `❌ AI Verification Failed\n\n${response.message}`;
+        
+        if (response.detectedType) {
+          errorMsg += `\n\nDetected Type: ${response.detectedType}`;
+          errorMsg += `\nConfidence: ${confidencePercent}%`;
+        }
+        
+        errorMsg += `\n\n💡 Tip: Make sure you selected the correct document type and the image is clear. `;
+        
+        alert(errorMsg);
+      } else {
+        alert(response.message || 'Upload failed');
+      }
     }
-  };
+  } catch (error) {
+    console.error('Upload error:', error);
+    alert('Upload failed. Please try again.');
+  } finally {
+    setLoading(false);
+  }
+};
+  
 
   return (
     <form onSubmit={handleSubmit}>
