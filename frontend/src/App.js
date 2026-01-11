@@ -114,7 +114,7 @@ const api = {
   if (recaptchaToken) {
     formData.append('recaptchaToken', recaptchaToken);
   }
-  return api. request('/auth/login', { method: 'POST', headers: {}, body: formData });
+  return api.request('/auth/login', { method: 'POST', headers: {}, body: formData });
 },
 
   register: (username, password, role, recaptchaToken) => {
@@ -130,17 +130,30 @@ const api = {
 
   logout: () => api.request('/auth/logout', { method: 'POST' }),
   checkAuth: () => api.request('/auth/check'),
-  uploadDocument: (file, studentId, documentType, description) => {
+  uploadDocument: (file, studentId, documentType, description, fileHash) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('studentId', studentId);
     formData.append('documentType', documentType);
     formData.append('description', description);
+    if (fileHash) {
+      formData.append('fileHash', fileHash);
+    }
     return api.request('/documents/upload', { method: 'POST', headers: {}, body: formData });
+  },
+  verifyDocumentType: (file, documentType) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    formData.append('documentType', documentType);
+    return api.request('/documents/verify-document', {
+      method: 'POST',
+      headers: {},
+      body: formData,
+    });
   },
   getMyDocuments: () => api.request('/documents/my-documents'),
   downloadDocument: (documentId) => fetch(`${api.baseURL}/documents/download/${documentId}`, { credentials: 'include' }),
-  verifyDocument: (documentId) => api.request(`/documents/verify/${documentId}`),
+  verifyDocumentIntegrity: (documentId) => api.request(`/documents/verify/${documentId}`),
   getAllStudents: () => api.request('/documents/students'),
   deleteDocument: (documentId) => api.request(`/documents/${documentId}`, { method: 'DELETE' }),
 };
@@ -169,7 +182,7 @@ const AuthProvider = ({ children }) => {
 
   const login = async (username, password, recaptchaToken) => {
   try {
-    const response = await api. login(username, password, recaptchaToken);
+    const response = await api.login(username, password, recaptchaToken);
     if (response.success) {
       setUser({ id: response.userId, username: response.username, role: response.role });
       return { success: true };
@@ -255,7 +268,7 @@ const LoginForm = ({ formData, setFormData, handleSubmit, loading, error, setSho
     <form onSubmit={onSubmit}>
       <div style={{ marginBottom: '1rem' }}>
         <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
-        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target. value })} style={styles.input} placeholder="Enter your username" required />
+        <input type="text" value={formData.username} onChange={(e) => setFormData({ ...formData, username: e.target.value })} style={styles.input} placeholder="Enter your username" required />
       </div>
 
       <div style={{ marginBottom: '1rem' }}>
@@ -335,12 +348,12 @@ const RegisterForm = ({ setShowRegister }) => {
   return (
     <form onSubmit={handleSubmit}>
       <div style={{ marginBottom: '1rem' }}>
-        <label style={{ display: 'block', fontSize:  '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
+        <label style={{ display: 'block', fontSize: '14px', fontWeight: '500', color: '#374151', marginBottom: '0.5rem' }}>Username</label>
         <input 
           type="text" 
           value={formData.username} 
           onChange={(e) => setFormData({ ...formData, username: e.target.value })} 
-          style={styles. input} 
+          style={styles.input} 
           placeholder="Choose a username" 
           required 
         />
@@ -598,7 +611,7 @@ const DocumentsList = ({ documents, onRefresh }) => {
   const handleVerify = async (documentId) => {
     setVerifying((prev) => ({ ...prev, [documentId]: true }));
     try {
-      const response = await api.verifyDocument(documentId);
+      const response = await api.verifyDocumentIntegrity(documentId);
       alert(response.message);
     } catch (error) {
       alert('Verification failed');
@@ -702,6 +715,9 @@ const UploadDocument = ({ students, onUpload }) => {
   const [formData, setFormData] = useState({ studentId: '', documentType: 'General', description: '' });
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verified, setVerified] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
   const [dragActive, setDragActive] = useState(false);
 
   const handleDrag = (e) => {
@@ -720,19 +736,60 @@ const UploadDocument = ({ students, onUpload }) => {
     setDragActive(false);
     if (e.dataTransfer.files && e.dataTransfer.files[0]) {
       setFile(e.dataTransfer.files[0]);
+      setVerified(false);
+      setVerificationResult(null);
+    }
+  };
+
+  const handleVerify = async () => {
+    if (!file || !formData.documentType) {
+      alert('Please select a file and document type first');
+      return;
+    }
+
+    setVerifying(true);
+    setVerified(false);
+    setVerificationResult(null);
+
+    try {
+      const response = await api.verifyDocumentType(file, formData.documentType);
+
+      setVerificationResult(response);
+      
+      if (response.verified) {
+        setVerified(true);
+        alert(`✅ Verification Successful!\nDetected: ${response.detectedType}\nConfidence: ${(response.confidence * 100).toFixed(1)}%`);
+      } else {
+        setVerified(false);
+        alert(`❌ ${response.message}`);
+      }
+    } catch (error) {
+      alert('Verification failed. Please try again.');
+      setVerified(false);
+    } finally {
+      setVerifying(false);
     }
   };
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    if (!verified) {
+      alert('Please verify the document first before uploading!');
+      return;
+    }
+    
     if (!file || !formData.studentId) return;
 
     setLoading(true);
     try {
-      const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description);
+      const fileHash = verificationResult?.fileHash;
+      const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description, fileHash);
       if (response.success) {
-        alert('Document uploaded successfully!');
+        alert('Document uploaded successfully to blockchain!');
         setFile(null);
+        setVerified(false);
+        setVerificationResult(null);
         setFormData({ studentId: '', documentType: 'General', description: '' });
         onUpload();
       } else {
@@ -793,7 +850,7 @@ const UploadDocument = ({ students, onUpload }) => {
           onDragOver={handleDrag}
           onDrop={handleDrop}
         >
-          <input type="file" onChange={(e) => setFile(e.target.files[0])} style={{ display: 'none' }} id="file-upload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" />
+          <input type="file" onChange={(e) => { setFile(e.target.files[0]); setVerified(false); setVerificationResult(null); }} style={{ display: 'none' }} id="file-upload" accept=".pdf,.doc,.docx,.jpg,.jpeg,.png" />
           <label htmlFor="file-upload" style={{ cursor: 'pointer' }}>
             {file ? (
               <div>
@@ -814,8 +871,52 @@ const UploadDocument = ({ students, onUpload }) => {
         </div>
       </div>
 
-      <button type="submit" disabled={loading || !file || !formData.studentId} style={{ ...styles.button, ...styles.buttonPrimary, width: '100%' }}>
-        {loading ? 'Uploading...' : 'Upload Document'}
+      {/* Add Verification Section */}
+      {file && (
+        <div style={{ marginTop: '1rem', padding: '1rem', backgroundColor: verified ? '#d1fae5' : '#fef3c7', borderRadius: '8px' }}>
+          <h4 style={{ marginBottom: '0.5rem', fontSize: '14px', fontWeight: '500', color: '#111827' }}>Document Verification</h4>
+          
+          {!verified && !verifying && (
+            <button
+              type="button"
+              onClick={handleVerify}
+              style={{ ...styles.button, backgroundColor: '#3b82f6', color: 'white', marginBottom: '0.5rem' }}
+            >
+              🔍 Verify Document with AI
+            </button>
+          )}
+          
+          {verifying && <p style={{ fontSize: '14px', color: '#6b7280' }}>🔄 Verifying document with AI...</p>}
+          
+          {verified && verificationResult && (
+            <div>
+              <p style={{ color: '#047857', fontWeight: 'bold', fontSize: '14px' }}>✅ Verified Successfully!</p>
+              <p style={{ fontSize: '13px', color: '#065f46' }}>Detected Type: {verificationResult.detectedType}</p>
+              <p style={{ fontSize: '13px', color: '#065f46' }}>Confidence: {(verificationResult.confidence * 100).toFixed(1)}%</p>
+            </div>
+          )}
+          
+          {!verified && verificationResult && (
+            <div>
+              <p style={{ color: '#dc2626', fontWeight: 'bold', fontSize: '14px' }}>❌ Verification Failed</p>
+              <p style={{ fontSize: '13px', color: '#991b1b' }}>{verificationResult.message}</p>
+            </div>
+          )}
+        </div>
+      )}
+
+      <button 
+        type="submit" 
+        disabled={loading || !file || !formData.studentId || !verified} 
+        style={{ 
+          ...styles.button, 
+          ...styles.buttonPrimary, 
+          width: '100%',
+          opacity: (!verified || loading) ? 0.5 : 1,
+          cursor: (!verified || loading) ? 'not-allowed' : 'pointer'
+        }}
+      >
+        {loading ? 'Uploading to Blockchain...' : verified ? '📤 Upload to Blockchain' : '⚠️ Verify Document First'}
       </button>
     </form>
   );
@@ -889,7 +990,7 @@ const StudentDashboard = () => {
 
   const handleVerify = async (documentId) => {
     try {
-      const response = await api.verifyDocument(documentId);
+      const response = await api.verifyDocumentIntegrity(documentId);
       alert(response.message);
     } catch (error) {
       alert('Verification failed');
