@@ -5,6 +5,7 @@ package com.educhain.document_system.controller;
 import com.educhain.document_system.model.Document;
 import com.educhain.document_system.model.User;
 import com.educhain.document_system.service.DocumentService;
+import com.educhain.document_system.service.DocumentVerificationService;
 import com.educhain.document_system.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -29,19 +30,20 @@ public class DocumentController {
     @Autowired
     private UserService userService;
     
-    // Upload document (Admin only)
-    @PostMapping("/upload")
-    public ResponseEntity<Map<String, Object>> uploadDocument(
+    @Autowired
+    private DocumentVerificationService verificationService;
+    
+    // Verify document type with AI (Admin only)
+    @PostMapping("/verify-document")
+    public ResponseEntity<Map<String, Object>> verifyDocumentType(
             @RequestParam("file") MultipartFile file,
-            @RequestParam("studentId") Long studentId,
-            @RequestParam(value = "documentType", defaultValue = "General") String documentType,
-            @RequestParam(value = "description", defaultValue = "") String description,
+            @RequestParam("documentType") String documentType,
             HttpSession session) {
         
         Map<String, Object> response = new HashMap<>();
         
         try {
-            // Check if user is admin
+            // Check if user is admin (only admins/colleges can upload)
             User currentUser = (User) session.getAttribute("user");
             if (currentUser == null || currentUser.getRole() != User.Role.ADMIN) {
                 response.put("success", false);
@@ -49,10 +51,64 @@ public class DocumentController {
                 return ResponseEntity.ok(response);
             }
             
-            // Get student
-            User student = userService.getUserById(studentId);
+            // Verify document with AI
+            DocumentVerificationService.VerificationResult result = verificationService.verifyDocument(file, documentType);
             
-            // Upload document
+            response.put("success", true);
+            response.put("verified", result.isMatches());
+            response.put("detectedType", result.getDetectedType());
+            response.put("expectedType", result.getExpectedType());
+            response.put("confidence", result.getConfidence());
+            response.put("reason", result.getReason());
+            
+            if (!result.isMatches()) {
+                response.put("message", String.format(
+                    "Document verification failed: The uploaded document appears to be a '%s', but you selected '%s'. %s",
+                    result.getDetectedType(),
+                    result.getExpectedType(),
+                    result.getReason()
+                ));
+            } else {
+                response.put("message", "Document verified successfully!");
+            }
+            
+        } catch (Exception e) {
+            response.put("success", false);
+            response.put("verified", false);
+            response.put("message", "Verification failed: " + e.getMessage());
+        }
+        
+        return ResponseEntity.ok(response);
+    }
+    
+    // Upload document (Admin only)
+    @PostMapping("/upload")
+    public ResponseEntity<Map<String, Object>> uploadDocument(
+            @RequestParam("file") MultipartFile file,
+            @RequestParam("studentId") Long studentId,
+            @RequestParam(value = "documentType", defaultValue = "General") String documentType,
+            @RequestParam(value = "description", defaultValue = "") String description,
+            @RequestParam(value = "verificationPassed", defaultValue = "false") boolean verificationPassed,
+            HttpSession session) {
+        
+        Map<String, Object> response = new HashMap<>();
+        
+        try {
+            User currentUser = (User) session.getAttribute("user");
+            if (currentUser == null || currentUser.getRole() != User.Role.ADMIN) {
+                response.put("success", false);
+                response.put("message", "Access denied! Admin only.");
+                return ResponseEntity.ok(response);
+            }
+            
+            // Require verification for document uploads
+            if (!verificationPassed) {
+                response.put("success", false);
+                response.put("message", "Document must be verified before upload. Please verify first.");
+                return ResponseEntity.ok(response);
+            }
+            
+            User student = userService.getUserById(studentId);
             Document document = documentService.uploadDocument(file, student, documentType, description);
             
             response.put("success", true);
