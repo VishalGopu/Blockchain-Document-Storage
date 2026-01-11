@@ -17,6 +17,7 @@ import org.springframework.web.bind.annotation.*;
 import org.springframework.web.multipart.MultipartFile;
 import jakarta.servlet.http.HttpSession;
 import java.io.File;
+import java.security.MessageDigest;
 import java.time.format.DateTimeFormatter;
 import java.util.*;
 
@@ -32,6 +33,21 @@ public class DocumentController {
     
     @Autowired
     private DocumentVerificationService verificationService;
+    
+    /**
+     * Generate a cryptographically secure hash for file verification
+     */
+    private String generateFileHash(MultipartFile file) throws Exception {
+        MessageDigest digest = MessageDigest.getInstance("SHA-256");
+        byte[] hash = digest.digest(file.getBytes());
+        StringBuilder hexString = new StringBuilder();
+        for (byte b : hash) {
+            String hex = Integer.toHexString(0xff & b);
+            if (hex.length() == 1) hexString.append('0');
+            hexString.append(hex);
+        }
+        return hexString.toString();
+    }
     
     // Verify document type with AI (Admin only)
     @PostMapping("/verify-document")
@@ -63,8 +79,8 @@ public class DocumentController {
             
             // Store verification result in session to prevent bypass
             if (result.isMatches()) {
-                // Store file hash and verification status
-                String fileHash = String.valueOf(file.getOriginalFilename().hashCode() + file.getSize());
+                // Store file hash and verification status using cryptographic hash
+                String fileHash = generateFileHash(file);
                 session.setAttribute("verifiedFile_" + fileHash, true);
                 response.put("fileHash", fileHash);
             }
@@ -109,8 +125,8 @@ public class DocumentController {
                 return ResponseEntity.ok(response);
             }
             
-            // Verify that the file was verified in this session
-            String currentFileHash = String.valueOf(file.getOriginalFilename().hashCode() + file.getSize());
+            // Verify that the file was verified in this session using cryptographic hash
+            String currentFileHash = generateFileHash(file);
             Boolean isVerified = (Boolean) session.getAttribute("verifiedFile_" + currentFileHash);
             
             if (isVerified == null || !isVerified || !currentFileHash.equals(fileHash)) {

@@ -7,11 +7,16 @@ import com.fasterxml.jackson.databind.ObjectMapper;
 import com.fasterxml.jackson.databind.JsonNode;
 import com.fasterxml.jackson.databind.node.ObjectNode;
 import com.fasterxml.jackson.databind.node.ArrayNode;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
+import java.security.MessageDigest;
 import java.util.Base64;
 import java.io.IOException;
 
 @Service
 public class DocumentVerificationService {
+    
+    private static final Logger logger = LoggerFactory.getLogger(DocumentVerificationService.class);
     
     @Value("${gemini.api.key}")
     private String geminiApiKey;
@@ -65,7 +70,7 @@ public class DocumentVerificationService {
             
         } catch (Exception e) {
             // Log the full error but return sanitized message
-            System.err.println("AI verification failed: " + e.getMessage());
+            logger.error("AI verification failed", e);
             throw new RuntimeException("AI verification service temporarily unavailable. Please try again later.");
         }
     }
@@ -92,6 +97,7 @@ public class DocumentVerificationService {
     
     private String callGeminiAPI(String base64Image, String prompt, String mimeType) throws Exception {
         // Use REST API call to Gemini
+        // Note: Gemini API requires the key as a query parameter per their API specification
         String apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + geminiApiKey;
         
         // Build request body using Jackson to prevent JSON injection
@@ -132,7 +138,7 @@ public class DocumentVerificationService {
         
         if (response.statusCode() != 200) {
             // Log the error but don't expose details to user
-            System.err.println("Gemini API error (status " + response.statusCode() + "): " + response.body());
+            logger.error("Gemini API error (status {}): {}", response.statusCode(), response.body());
             throw new RuntimeException("AI service returned an error. Please try again.");
         }
         
@@ -146,7 +152,22 @@ public class DocumentVerificationService {
             ObjectMapper mapper = new ObjectMapper();
             JsonNode root = mapper.readTree(apiResponse);
             
-            String textContent = root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
+            // Add null/bounds checking for API response
+            JsonNode candidates = root.path("candidates");
+            if (candidates.isMissingNode() || candidates.size() == 0) {
+                throw new IllegalStateException("No candidates in API response");
+            }
+            
+            JsonNode content = candidates.get(0).path("content");
+            JsonNode parts = content.path("parts");
+            if (parts.isMissingNode() || parts.size() == 0) {
+                throw new IllegalStateException("No parts in API response");
+            }
+            
+            String textContent = parts.get(0).path("text").asText();
+            if (textContent == null || textContent.isEmpty()) {
+                throw new IllegalStateException("Empty text content in API response");
+            }
             
             // Parse the JSON within the text
             JsonNode verification = mapper.readTree(textContent);
@@ -169,7 +190,7 @@ public class DocumentVerificationService {
             
         } catch (Exception e) {
             // Fallback if parsing fails - log the error but return sanitized message
-            System.err.println("Failed to parse AI response: " + e.getMessage());
+            logger.error("Failed to parse AI response", e);
             VerificationResult result = new VerificationResult();
             result.setValid(false);
             result.setReason("Unable to verify document. The AI response could not be processed.");
