@@ -703,6 +703,8 @@ const UploadDocument = ({ students, onUpload }) => {
   const [file, setFile] = useState(null);
   const [loading, setLoading] = useState(false);
   const [dragActive, setDragActive] = useState(false);
+  const [verifying, setVerifying] = useState(false);
+  const [verificationResult, setVerificationResult] = useState(null);
 
   const handleDrag = (e) => {
     e.preventDefault();
@@ -728,20 +730,37 @@ const UploadDocument = ({ students, onUpload }) => {
     if (!file || !formData.studentId) return;
 
     setLoading(true);
+    setVerifying(true);
+    setVerificationResult(null);
+    
     try {
       const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description);
-      if (response.success) {
-        alert('Document uploaded successfully!');
+      
+      if (response.success && response.verified) {
+        const confidencePercent = response.confidence ? Math.round(response.confidence * 100) : 100;
+        alert(`✅ Document verified (${confidencePercent}% confidence) and uploaded successfully!`);
         setFile(null);
         setFormData({ studentId: '', documentType: 'General', description: '' });
         onUpload();
+      } else if (response.success === false && response.verified === false) {
+        // Verification failed
+        setVerificationResult({
+          success: false,
+          message: response.message,
+          detectedType: response.detectedType,
+          confidence: response.confidence
+        });
+        const confidencePercent = response.confidence ? Math.round(response.confidence * 100) : 0;
+        alert(`❌ Verification Failed: ${response.message}\n${response.detectedType ? `Detected Type: ${response.detectedType} (${confidencePercent}% confidence)` : ''}`);
       } else {
-        alert(response.message);
+        alert(response.message || 'Upload completed');
       }
     } catch (error) {
+      console.error('Upload error:', error);
       alert('Upload failed. Please try again.');
     } finally {
       setLoading(false);
+      setVerifying(false);
     }
   };
 
@@ -814,8 +833,31 @@ const UploadDocument = ({ students, onUpload }) => {
         </div>
       </div>
 
+      {/* NEW: Verification Status Display */}
+      {verifying && (
+        <div style={{ padding: '1rem', backgroundColor: '#eff6ff', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #bfdbfe' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <div style={{ width: '20px', height: '20px', border: '3px solid #bfdbfe', borderTop: '3px solid #2563eb', borderRadius: '50%', animation: 'spin 1s linear infinite' }}></div>
+            <span style={{ color: '#1e40af', fontWeight: '500' }}>🤖 Verifying document with AI...</span>
+          </div>
+        </div>
+      )}
+      
+      {verificationResult && !verificationResult.success && (
+        <div style={{ padding: '1rem', backgroundColor: '#fee2e2', borderRadius: '8px', marginBottom: '1rem', border: '1px solid #fca5a5' }}>
+          <strong style={{ color: '#991b1b' }}>⚠️ Verification Failed</strong>
+          <p style={{ color: '#991b1b', marginTop: '0.5rem', marginBottom: '0.5rem' }}>{verificationResult.message}</p>
+          {verificationResult.detectedType && (
+            <p style={{ color: '#991b1b', marginTop: '0.25rem' }}>
+              Detected Type: <strong>{verificationResult.detectedType}</strong>
+              {verificationResult.confidence && ` (${Math.round(verificationResult.confidence * 100)}% confidence)`}
+            </p>
+          )}
+        </div>
+      )}
+
       <button type="submit" disabled={loading || !file || !formData.studentId} style={{ ...styles.button, ...styles.buttonPrimary, width: '100%' }}>
-        {loading ? 'Uploading...' : 'Upload Document'}
+        {verifying ? '🤖 Verifying...' : loading ? 'Uploading...' : 'Upload Document'}
       </button>
     </form>
   );

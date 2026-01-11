@@ -4,7 +4,9 @@ package com.educhain.document_system.controller;
 
 import com.educhain.document_system.model.Document;
 import com.educhain.document_system.model.User;
+import com.educhain.document_system.model.VerificationResult;
 import com.educhain.document_system.service.DocumentService;
+import com.educhain.document_system.service.GeminiVerificationService;
 import com.educhain.document_system.service.UserService;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.core.io.FileSystemResource;
@@ -29,6 +31,9 @@ public class DocumentController {
     @Autowired
     private UserService userService;
     
+    @Autowired
+    private GeminiVerificationService geminiVerificationService;
+    
     // Upload document (Admin only)
     @PostMapping("/upload")
     public ResponseEntity<Map<String, Object>> uploadDocument(
@@ -49,16 +54,30 @@ public class DocumentController {
                 return ResponseEntity.ok(response);
             }
             
+            // ✅ NEW: VERIFY DOCUMENT WITH GEMINI AI
+            VerificationResult verificationResult = geminiVerificationService.verifyDocument(file, documentType);
+            
+            if (!verificationResult.isVerified()) {
+                response.put("success", false);
+                response.put("verified", false);
+                response.put("message", verificationResult.getMessage());
+                response.put("detectedType", verificationResult.getDetectedType());
+                response.put("confidence", verificationResult.getConfidenceScore());
+                return ResponseEntity.ok(response);
+            }
+            
             // Get student
             User student = userService.getUserById(studentId);
             
-            // Upload document
+            // Upload document - only if verified
             Document document = documentService.uploadDocument(file, student, documentType, description);
             
             response.put("success", true);
-            response.put("message", "Document uploaded successfully!");
+            response.put("verified", true);
+            response.put("message", "Document verified and uploaded successfully!");
             response.put("documentId", document.getId());
             response.put("filename", document.getFilename());
+            response.put("confidence", verificationResult.getConfidenceScore());
             
         } catch (Exception e) {
             response.put("success", false);
