@@ -3,6 +3,10 @@ package com.educhain.document_system.service;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.web.multipart.MultipartFile;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.databind.JsonNode;
+import com.fasterxml.jackson.databind.node.ObjectNode;
+import com.fasterxml.jackson.databind.node.ArrayNode;
 import java.util.Base64;
 import java.io.IOException;
 
@@ -18,10 +22,33 @@ public class DocumentVerificationService {
     @Value("${verification.confidence.threshold:0.80}")
     private double confidenceThreshold;
     
+    private static final long MAX_FILE_SIZE = 10 * 1024 * 1024; // 10MB
+    private static final String[] ALLOWED_MIME_TYPES = {"image/jpeg", "image/png", "image/jpg", "application/pdf"};
+    
     /**
      * Verify document type using Google Gemini Vision API
      */
     public VerificationResult verifyDocument(MultipartFile file, String expectedDocumentType) throws IOException {
+        // Validate file size
+        if (file.getSize() > MAX_FILE_SIZE) {
+            throw new IllegalArgumentException("File size exceeds maximum allowed size of 10MB");
+        }
+        
+        // Validate file type
+        String contentType = file.getContentType();
+        boolean validType = false;
+        if (contentType != null) {
+            for (String allowedType : ALLOWED_MIME_TYPES) {
+                if (contentType.startsWith(allowedType)) {
+                    validType = true;
+                    break;
+                }
+            }
+        }
+        if (!validType) {
+            throw new IllegalArgumentException("Invalid file type. Only images and PDFs are allowed.");
+        }
+        
         // Convert file to base64
         byte[] fileBytes = file.getBytes();
         String base64Image = Base64.getEncoder().encodeToString(fileBytes);
@@ -31,13 +58,15 @@ public class DocumentVerificationService {
         
         try {
             // Call Gemini API
-            String response = callGeminiAPI(base64Image, prompt);
+            String response = callGeminiAPI(base64Image, prompt, contentType);
             
             // Parse response and extract verification result
             return parseVerificationResponse(response, expectedDocumentType);
             
         } catch (Exception e) {
-            throw new RuntimeException("AI verification failed: " + e.getMessage());
+            // Log the full error but return sanitized message
+            System.err.println("AI verification failed: " + e.getMessage());
+            throw new RuntimeException("AI verification service temporarily unavailable. Please try again later.");
         }
     }
     
@@ -61,19 +90,37 @@ public class DocumentVerificationService {
         );
     }
     
-    private String callGeminiAPI(String base64Image, String prompt) throws Exception {
+    private String callGeminiAPI(String base64Image, String prompt, String mimeType) throws Exception {
         // Use REST API call to Gemini
         String apiUrl = "https://generativelanguage.googleapis.com/v1beta/models/" + modelName + ":generateContent?key=" + geminiApiKey;
         
-        // Build request body
-        String requestBody = String.format(
-            "{\"contents\":[{\"parts\":[{\"text\":\"%s\"},{\"inline_data\":{\"mime_type\":\"image/jpeg\",\"data\":\"%s\"}}]}]}",
-            prompt.replace("\"", "\\\"").replace("\n", "\\n"),
-            base64Image
-        );
+        // Build request body using Jackson to prevent JSON injection
+        ObjectMapper mapper = new ObjectMapper();
+        ObjectNode rootNode = mapper.createObjectNode();
+        ArrayNode contentsArray = mapper.createArrayNode();
+        ObjectNode contentNode = mapper.createObjectNode();
+        ArrayNode partsArray = mapper.createArrayNode();
         
-        // Make HTTP request using RestTemplate or HttpClient
-        // For simplicity, using basic implementation
+        // Add text part
+        ObjectNode textPart = mapper.createObjectNode();
+        textPart.put("text", prompt);
+        partsArray.add(textPart);
+        
+        // Add image part
+        ObjectNode imagePart = mapper.createObjectNode();
+        ObjectNode inlineData = mapper.createObjectNode();
+        inlineData.put("mime_type", mimeType != null ? mimeType : "image/jpeg");
+        inlineData.put("data", base64Image);
+        imagePart.set("inline_data", inlineData);
+        partsArray.add(imagePart);
+        
+        contentNode.set("parts", partsArray);
+        contentsArray.add(contentNode);
+        rootNode.set("contents", contentsArray);
+        
+        String requestBody = mapper.writeValueAsString(rootNode);
+        
+        // Make HTTP request
         java.net.http.HttpClient client = java.net.http.HttpClient.newHttpClient();
         java.net.http.HttpRequest request = java.net.http.HttpRequest.newBuilder()
             .uri(java.net.URI.create(apiUrl))
@@ -84,7 +131,9 @@ public class DocumentVerificationService {
         java.net.http.HttpResponse<String> response = client.send(request, java.net.http.HttpResponse.BodyHandlers.ofString());
         
         if (response.statusCode() != 200) {
-            throw new RuntimeException("Gemini API error: " + response.body());
+            // Log the error but don't expose details to user
+            System.err.println("Gemini API error (status " + response.statusCode() + "): " + response.body());
+            throw new RuntimeException("AI service returned an error. Please try again.");
         }
         
         return response.body();
@@ -94,29 +143,36 @@ public class DocumentVerificationService {
         try {
             // Parse JSON response from Gemini
             // Extract the text content from the response
-            com.fasterxml.jackson.databind.ObjectMapper mapper = new com.fasterxml.jackson.databind.ObjectMapper();
-            com.fasterxml.jackson.databind.JsonNode root = mapper.readTree(apiResponse);
+            ObjectMapper mapper = new ObjectMapper();
+            JsonNode root = mapper.readTree(apiResponse);
             
             String textContent = root.path("candidates").get(0).path("content").path("parts").get(0).path("text").asText();
             
             // Parse the JSON within the text
-            com.fasterxml.jackson.databind.JsonNode verification = mapper.readTree(textContent);
+            JsonNode verification = mapper.readTree(textContent);
             
             VerificationResult result = new VerificationResult();
-            result.setDetectedType(verification.path("documentType").asText());
+            String detectedType = verification.path("documentType").asText();
+            result.setDetectedType(detectedType != null ? detectedType : "Unknown");
             result.setValid(verification.path("isValid").asBoolean());
             result.setConfidence(verification.path("confidence").asDouble());
             result.setReason(verification.path("reason").asText());
             result.setExpectedType(expectedType);
-            result.setMatches(result.getDetectedType().equalsIgnoreCase(expectedType) && result.getConfidence() >= confidenceThreshold);
+            
+            // Add null check before equalsIgnoreCase
+            boolean typeMatches = detectedType != null && 
+                                  detectedType.equalsIgnoreCase(expectedType) && 
+                                  result.getConfidence() >= confidenceThreshold;
+            result.setMatches(typeMatches);
             
             return result;
             
         } catch (Exception e) {
-            // Fallback if parsing fails
+            // Fallback if parsing fails - log the error but return sanitized message
+            System.err.println("Failed to parse AI response: " + e.getMessage());
             VerificationResult result = new VerificationResult();
             result.setValid(false);
-            result.setReason("Failed to parse AI response: " + e.getMessage());
+            result.setReason("Unable to verify document. The AI response could not be processed.");
             return result;
         }
     }

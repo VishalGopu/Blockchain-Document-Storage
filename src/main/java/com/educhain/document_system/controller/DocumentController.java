@@ -61,6 +61,14 @@ public class DocumentController {
             response.put("confidence", result.getConfidence());
             response.put("reason", result.getReason());
             
+            // Store verification result in session to prevent bypass
+            if (result.isMatches()) {
+                // Store file hash and verification status
+                String fileHash = String.valueOf(file.getOriginalFilename().hashCode() + file.getSize());
+                session.setAttribute("verifiedFile_" + fileHash, true);
+                response.put("fileHash", fileHash);
+            }
+            
             if (!result.isMatches()) {
                 response.put("message", String.format(
                     "Document verification failed: The uploaded document appears to be a '%s', but you selected '%s'. %s",
@@ -88,7 +96,7 @@ public class DocumentController {
             @RequestParam("studentId") Long studentId,
             @RequestParam(value = "documentType", defaultValue = "General") String documentType,
             @RequestParam(value = "description", defaultValue = "") String description,
-            @RequestParam(value = "verificationPassed", defaultValue = "false") boolean verificationPassed,
+            @RequestParam(value = "fileHash", required = false) String fileHash,
             HttpSession session) {
         
         Map<String, Object> response = new HashMap<>();
@@ -101,12 +109,18 @@ public class DocumentController {
                 return ResponseEntity.ok(response);
             }
             
-            // Require verification for document uploads
-            if (!verificationPassed) {
+            // Verify that the file was verified in this session
+            String currentFileHash = String.valueOf(file.getOriginalFilename().hashCode() + file.getSize());
+            Boolean isVerified = (Boolean) session.getAttribute("verifiedFile_" + currentFileHash);
+            
+            if (isVerified == null || !isVerified || !currentFileHash.equals(fileHash)) {
                 response.put("success", false);
                 response.put("message", "Document must be verified before upload. Please verify first.");
                 return ResponseEntity.ok(response);
             }
+            
+            // Clear verification status after use
+            session.removeAttribute("verifiedFile_" + currentFileHash);
             
             User student = userService.getUserById(studentId);
             Document document = documentService.uploadDocument(file, student, documentType, description);

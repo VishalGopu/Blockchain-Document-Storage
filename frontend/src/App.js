@@ -130,13 +130,15 @@ const api = {
 
   logout: () => api.request('/auth/logout', { method: 'POST' }),
   checkAuth: () => api.request('/auth/check'),
-  uploadDocument: (file, studentId, documentType, description) => {
+  uploadDocument: (file, studentId, documentType, description, fileHash) => {
     const formData = new FormData();
     formData.append('file', file);
     formData.append('studentId', studentId);
     formData.append('documentType', documentType);
     formData.append('description', description);
-    formData.append('verificationPassed', 'true');
+    if (fileHash) {
+      formData.append('fileHash', fileHash);
+    }
     return api.request('/documents/upload', { method: 'POST', headers: {}, body: formData });
   },
   verifyDocumentType: (file, documentType) => {
@@ -781,7 +783,8 @@ const UploadDocument = ({ students, onUpload }) => {
 
     setLoading(true);
     try {
-      const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description);
+      const fileHash = verificationResult?.fileHash;
+      const response = await api.uploadDocument(file, formData.studentId, formData.documentType, formData.description, fileHash);
       if (response.success) {
         alert('Document uploaded successfully to blockchain!');
         setFile(null);
